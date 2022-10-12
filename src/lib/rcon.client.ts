@@ -5,6 +5,7 @@ import {
   ITCPEventData 
 } from "https://deno.land/x/net@v1.1.2/src/mod.ts";
 import { Buffer } from "https://deno.land/std@0.76.0/node/buffer.ts";
+import Debug from "https://deno.land/x/debuglog/debug.ts";
 
 import { RconEncoder } from "./utils/rcon.encoder.ts";
 import { RconMessage } from "./models/message.ts";
@@ -12,6 +13,7 @@ import { Deferred } from "./utils/deferred.ts";
 
 class ErrorRconServer extends Error {}
 
+const debug = Debug('RconClient');
 export class RconClient extends EventEmitter {
   protected sock = new TCPClient();
   protected id = 0x3fffffff;
@@ -28,9 +30,10 @@ export class RconClient extends EventEmitter {
 
   async connect() {
     if (this.sock.connected) return;
-    console.log('The rcon client is connecting');
     await this.sock.connect(this.host, this.port);
+    debug(`Connected to ${this.host}:${this.port}`);
     this.sock.events.on(TCPEvents.RECEIVED_DATA, (e: ITCPEventData) =>  this._gather(e.data));
+    this.sock.events.on(TCPEvents.DISCONNECT, () => debug('Disconnected'));
     this.sock.poll();
   }
 
@@ -46,11 +49,7 @@ export class RconClient extends EventEmitter {
       if (this.buf.length < size) return;
       const data = this.buf.slice(0, size);
       this.buf = this.buf.slice(size, this.buf.length);
-      try {
-        this._process(this.encoder.decode(data));
-      } catch (err) {
-        this.emit("error", err);
-      }
+      this._process(this.encoder.decode(data));
     } while (true);
   }
 
@@ -59,8 +58,10 @@ export class RconClient extends EventEmitter {
       throw new ErrorRconServer("empty message received");
     }
     if (msg.isFromServer()) {
+      debug(`Received event [${msg.id}] ${msg.data[0]}`);
       this.emit("event", msg);
     } else {
+      debug(`Received message [${msg.id}] ${msg.data[0]}`);
       this.emit("message", msg);
       if (this.cbs.has(msg.id)) {
         const cbs = this.cbs.get(msg.id);
@@ -80,6 +81,7 @@ export class RconClient extends EventEmitter {
     const deferred = new Deferred<T, ErrorRconServer>();
     this.cbs.set(msg.id, deferred);
     await this.sock.write(this.encoder.encode(msg));
+    debug(`Sent message [${msg.id}] ${cmd[0]}`);
     return deferred.promise;
   }
 }

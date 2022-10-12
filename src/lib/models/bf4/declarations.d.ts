@@ -1,12 +1,12 @@
-export interface IPlayer {
+export interface IPlayerInfo {
   name: string;
   guid: string;
-  teamId: string;
-  squadId: string;
-  kills: string;
-  deaths: string;
-  score: string;
-  rank: string;
-  ping: string;
-  type: string;
+  teamId: number;
+  squadId: number;
+  kills: number;
+  deaths: number;
+  score: number;
+  rank: number;
+  ping: number;
+  type: number;
 }

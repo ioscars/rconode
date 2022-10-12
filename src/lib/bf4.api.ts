@@ -1,9 +1,10 @@
 import { filter, map, Subject } from "https://deno.land/x/rxjs@v1.0.2/mod.ts";
+import Debug from "https://deno.land/x/debuglog/debug.ts";
 import { BF4Commands } from "./models/bf4/bf4.cmds.d.ts";
-import { IPlayer } from "./models/bf4/declarations.d.ts";
 import { RconClient } from "./rcon.client.ts";
 import * as rconUtils from "./utils/rcon.utils.ts";
 
+const debug = Debug('RconBF4Api');
 export class BF4Api {
   constructor(
     protected conn: RconClient,
@@ -13,17 +14,15 @@ export class BF4Api {
 
   async login(pass: string) {
     await this.conn.connect();
-    console.log('The bf4 api is logging');
     try {
       const [serverHash] = await this.exec("login.hashed");
       const hashPass = rconUtils.hashPassword(pass, serverHash);
       await this.exec("login.hashed", hashPass);
-      this.conn.on("event", (e) => this.events.next(e.data));
+      debug('Login successful');
     } catch(e) {
       this.conn.disconnect();
       throw e;
     }
-    
   }
 
   help() {
@@ -36,22 +35,12 @@ export class BF4Api {
 
   async adminListPlayers() {
     const players = await this.exec("admin.listPlayers", "all");
-    return rconUtils.tabulate<IPlayer>(players);
+    return rconUtils.tabulate(players, 0, rconUtils.zipPlayerInfo);
   }
 
   async serverInfo() {
-    const i = await this.exec("serverInfo");
-    let s = 0;
-    return {
-      serverName: i[s++], players: +i[s++], maxPlayers: +i[s++],
-      gamemode: i[s++], map: i[s++], roundsPlayed: +i[s++],
-      roundsTotal: i[s++], teamScores: rconUtils.getTeamScore(i, 7, s += +i[7] + 2), onlineState: i[s++],
-      ranked: i[s++], punkBuster: i[s++], hasGamePassword: i[s++],
-      serverUpTime: +i[s++], roundTime: +i[s++], gameIpAndPort: i[s++],
-      punkBusterVersion: i[s++], joinQueueEnabled: i[s++], region: i[s++],
-      closestPingSite: i[s++], matchMakingEnabled: i[s++], blazePlayerCount: i[s++],
-      blazeGameState: i[s++]
-    };
+    const info = await this.exec("serverInfo");
+    return rconUtils.zipServerInfo(info);
   }
 
   adminKillPlayer(name: string) {
@@ -62,8 +51,14 @@ export class BF4Api {
     return this.exec("admin.kickPlayer", name);
   }
 
-  adminEvents(enable: "true" | "false" | "" = "") {
-    return this.exec("admin.eventsEnabled", enable);
+  async adminEvents(enable: "true" | "false") {
+    const reuslt = await this.exec("admin.eventsEnabled", enable);
+    if (enable === 'true') {
+      this.conn.on("event", this.processEvent);
+    } else {
+      this.conn.off("event", this.processEvent);
+    }
+    return reuslt;
   }
 
   adminMovePlayer(name: string, teamId: string, squadId: string, forceKill: "true" | "false" | "" = "") {
@@ -99,6 +94,7 @@ export class BF4Api {
     return this.conn.exec([cmd, ...args]);
   }
 
+  processEvent = (event: { id: number; data: string[] }) => this.events.next(event.data);
 
   // Player Events
   onPlayerChat$ = this.events.pipe(
@@ -115,7 +111,7 @@ export class BF4Api {
   );
   onPlayerLeave$ = this.events.pipe(
     filter((e) => e[0] === "player.onLeave"),
-    map((e) => ({ name: e[1], info: rconUtils.tabulate(e, 2).rows[0] }))
+    map((e) => ({ name: e[1], info: rconUtils.tabulate(e, 2, rconUtils.zipPlayerInfo).rows[0] }))
   );
   onPlayerSquadChange$ = this.events.pipe(
     filter((e) => e[0] === "player.onSquadChange"),
