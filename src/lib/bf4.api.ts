@@ -1,5 +1,5 @@
 import { filter, map, Subject } from "https://deno.land/x/rxjs@v1.0.2/mod.ts";
-import Debug from "https://deno.land/x/debuglog/debug.ts";
+import Debug from "https://deno.land/x/debuglog@v1.0.0/debug.ts";
 import { BF4Commands } from "./models/bf4/bf4.cmds.d.ts";
 import { RconClient } from "./rcon.client.ts";
 import * as rconUtils from "./utils/rcon.utils.ts";

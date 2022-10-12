@@ -5,7 +5,7 @@ import {
   ITCPEventData 
 } from "https://deno.land/x/net@v1.1.2/src/mod.ts";
 import { Buffer } from "https://deno.land/std@0.76.0/node/buffer.ts";
-import Debug from "https://deno.land/x/debuglog/debug.ts";
+import Debug from "https://deno.land/x/debuglog@v1.0.0/debug.ts";
 
 import { RconEncoder } from "./utils/rcon.encoder.ts";
 import { RconMessage } from "./models/message.ts";
