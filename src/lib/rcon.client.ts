@@ -1,43 +1,48 @@
-import {
-  EventEmitter,
-  TCPClient,
-  TCPEvents,
-  ITCPEventData 
-} from "https://deno.land/x/net@v1.1.2/src/mod.ts";
-import { Buffer } from "https://deno.land/std@0.76.0/node/buffer.ts";
-import Debug from "https://deno.land/x/debuglog@v1.0.0/debug.ts";
+import { EventEmitter, TCPClient, TCPEvents, ITCPEventData } from "../deps/net.ts";
+import { Buffer, Deferred, deferred, delay } from "../deps/std.ts";
+import d from "../deps/debug.ts";
 
 import { RconEncoder } from "./utils/rcon.encoder.ts";
 import { RconMessage } from "./models/message.ts";
-import { Deferred } from "./utils/deferred.ts";
 
 class ErrorRconServer extends Error {}
 
-const debug = Debug('RconClient');
+const debug = d('rconode:client');
 export class RconClient extends EventEmitter {
-  protected sock = new TCPClient();
+  sock = new TCPClient();
   protected id = 0x3fffffff;
   protected buf = new Buffer();
-  protected cbs = new Map<number, Deferred<any, ErrorRconServer>>();
+  protected cbs = new Map<number, Deferred<any>>();
+  protected ready = deferred();
 
   constructor(
     protected host: string,
     protected port: number,
+    protected isAutoReconnect = true,
     protected encoder = new RconEncoder(),
   ) {
     super();
+
+    this.sock.events.on(TCPEvents.RECEIVED_DATA, (e: ITCPEventData) =>  this._gather(e.data));
+    this.sock.events.on(TCPEvents.CONNECT, () =>  this.sock.poll());
+    this.sock.events.on(TCPEvents.DISCONNECT, () => debug('Disconnected'));
+    this.sock.events.on(TCPEvents.ERROR, () => this.isAutoReconnect && this.reconnect());
   }
 
   async connect() {
-    if (this.sock.connected) return;
     await this.sock.connect(this.host, this.port);
     debug(`Connected to ${this.host}:${this.port}`);
-    this.sock.events.on(TCPEvents.RECEIVED_DATA, (e: ITCPEventData) =>  this._gather(e.data));
-    this.sock.events.on(TCPEvents.DISCONNECT, () => debug('Disconnected'));
-    this.sock.poll();
+    this.ready.resolve();
+  }
+
+  async reconnect() {
+    debug('Reconnect');
+    await delay(1000);
+    await this.sock.connect(this.host, this.port);
   }
 
   disconnect() {
+    this.isAutoReconnect = false;
     return this.sock.close();
   }
 
@@ -55,13 +60,13 @@ export class RconClient extends EventEmitter {
 
   protected _process(msg: RconMessage) {
     if (msg.data.length === 0) {
-      throw new ErrorRconServer("empty message received");
+      throw new ErrorRconServer("Empty message received");
     }
     if (msg.isFromServer()) {
-      debug(`Received event [${msg.id}] ${msg.data[0]}`);
+      debug(`[${msg.id}] Received event: ${msg.data[0]}`);
       this.emit("event", msg);
     } else {
-      debug(`Received message [${msg.id}] ${msg.data[0]}`);
+      debug(`[${msg.id}] Received message: ${msg.data[0]}`);
       this.emit("message", msg);
       if (this.cbs.has(msg.id)) {
         const cbs = this.cbs.get(msg.id);
@@ -78,10 +83,14 @@ export class RconClient extends EventEmitter {
   public async exec<T extends string[]>(cmd: string | string[]) {
     const msg = new RconMessage(this.id, 0, cmd);
     this.id = (this.id + 1) & 0x3fffffff;
-    const deferred = new Deferred<T, ErrorRconServer>();
-    this.cbs.set(msg.id, deferred);
+    const dfrd = deferred<T>();
+    this.cbs.set(msg.id, dfrd);
+    if (!this.sock.connected) {
+      await this.ready;
+    }
+
     await this.sock.write(this.encoder.encode(msg));
-    debug(`Sent message [${msg.id}] ${cmd[0]}`);
-    return deferred.promise;
+    debug(`[${msg.id}] Sent message: ${cmd[0]}`);
+    return dfrd;
   }
 }

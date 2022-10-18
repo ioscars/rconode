@@ -1,4 +1,4 @@
-import { Buffer } from "https://deno.land/std@0.76.0/node/buffer.ts";
+import { Buffer } from "../../deps/std.ts";
 import { RconMessage } from "../models/message.ts";
 
 export class RconEncoder {

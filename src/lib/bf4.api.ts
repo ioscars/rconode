@@ -1,28 +1,56 @@
-import { filter, map, Subject } from "https://deno.land/x/rxjs@v1.0.2/mod.ts";
-import Debug from "https://deno.land/x/debuglog@v1.0.0/debug.ts";
+import { TCPEvents } from "../deps/net.ts";
+import { filter, map, Subject } from "../deps/rxjs.ts";
+import d from "../deps/debug.ts";
 import { BF4Commands } from "./models/bf4/bf4.cmds.d.ts";
 import { RconClient } from "./rcon.client.ts";
 import * as rconUtils from "./utils/rcon.utils.ts";
+import { deferred } from "../deps/std.ts";
 
-const debug = Debug('RconBF4Api');
+const debug = d('rconode:bf4api');
 export class BF4Api {
+  isLoggedIn = false;
+  isAdminEvents = false;
+  protected ready = deferred();
+  protected events = new Subject<string[]>();
+
   constructor(
     protected conn: RconClient,
-  ) {}
-
-  events = new Subject<string[]>();
+  ) {
+    this.conn.on("event", this.processEvent);
+  }
 
   async login(pass: string) {
+    this.conn.sock.events.on(TCPEvents.CONNECT, () => this._login(pass));
+    this.conn.sock.events.on(TCPEvents.DISCONNECT, () => this.isLoggedIn = false);
     await this.conn.connect();
+    return this.ready;
+  }
+
+  protected async _login(pass: string) {
+    this.isLoggedIn = false;
     try {
-      const [serverHash] = await this.exec("login.hashed");
+      const [serverHash] = await this.conn.exec("login.hashed");
       const hashPass = rconUtils.hashPassword(pass, serverHash);
-      await this.exec("login.hashed", hashPass);
+      await this.conn.exec(["login.hashed", hashPass]);
+      this.isLoggedIn = true;
+      this.ready.resolve();
       debug('Login successful');
+      this.ready = deferred();
+
+      if (this.isAdminEvents) {
+        await this.adminEvents('true');
+      }
     } catch(e) {
       this.conn.disconnect();
       throw e;
     }
+  }
+
+  async exec(cmd: BF4Commands, ...args: string[]) {
+    if (!this.isLoggedIn) {
+      await this.ready;
+    }
+    return this.conn.exec([cmd, ...args]);
   }
 
   help() {
@@ -47,16 +75,16 @@ export class BF4Api {
     return this.exec("admin.killPlayer", name);
   }
 
-  adminKickPlayer(name: string) {
-    return this.exec("admin.kickPlayer", name);
+  adminKickPlayer(name: string, reason = '') {
+    return this.exec("admin.kickPlayer", name, reason);
   }
 
   async adminEvents(enable: "true" | "false") {
     const reuslt = await this.exec("admin.eventsEnabled", enable);
     if (enable === 'true') {
-      this.conn.on("event", this.processEvent);
+      this.isAdminEvents = true;
     } else {
-      this.conn.off("event", this.processEvent);
+      this.isAdminEvents = false;
     }
     return reuslt;
   }
@@ -78,8 +106,8 @@ export class BF4Api {
     return rconUtils.squadIds2squads(list);
   }
 
-  squadLeader(teamId: string, squadId: string, soldierName = '') {
-    return this.exec('squad.leader', teamId, squadId, soldierName);
+  squadLeader(teamId: number, squadId: number, soldierName = '') {
+    return this.exec('squad.leader', teamId.toString(), squadId.toString(), soldierName);
   }
 
   mapListAvailableMaps(filter: 'perMap' | 'perGameMode') {
@@ -90,8 +118,8 @@ export class BF4Api {
     return this.exec('mapList.list', startIndex.toString());
   }
 
-  exec(cmd: BF4Commands, ...args: string[]) {
-    return this.conn.exec([cmd, ...args]);
+  async currentLevel() {
+    return (await this.exec('currentLevel'))[0];
   }
 
   processEvent = (event: { id: number; data: string[] }) => this.events.next(event.data);

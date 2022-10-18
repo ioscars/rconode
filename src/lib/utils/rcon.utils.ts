@@ -1,5 +1,4 @@
-import { Buffer } from "https://deno.land/std@0.76.0/node/buffer.ts";
-import { Md5 } from "https://deno.land/std@0.159.0/hash/md5.ts?s=Md5";
+import { Buffer, Md5 } from "../../deps/std.ts";
 import { squadNames } from "../models/bf4/squads.names.ts";
 import { PlayerInfo } from "../models/bf4/player-info.ts";
 
