@@ -12,7 +12,7 @@ export class RconClient extends EventEmitter {
   sock = new TCPClient();
   protected id = 0x3fffffff;
   protected buf = new Buffer();
-  protected cbs = new Map<number, Deferred<any>>();
+  protected cbs = new Map<number, Deferred<string[]>>();
   protected ready = deferred();
 
   constructor(
