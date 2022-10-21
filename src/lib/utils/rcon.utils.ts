@@ -14,6 +14,15 @@ export function zipObject<T>(values: string[], keys: string[]): T {
   return entity;
 }
 
+export function zipBanList(values: string[]) {
+  const list = [];
+  for (let i = 0; i < values.length;) {
+    const v = values.slice(i, i += 6);
+    list.push({idType: v[0], id: v[1], banType: v[2], secondsLeft: +v[3], roundsLeft: +v[4], reason: v[5]})
+  }
+  return list;
+}
+
 export function zipPlayerInfo(v: string[], _: string[]) {
   return new PlayerInfo(v[0], v[1], +v[2], +v[3], +v[4], +v[5], +v[6], +v[7], +v[8], +v[9]);
 }

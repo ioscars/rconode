@@ -122,6 +122,11 @@ export class BF4Api {
     return (await this.exec('currentLevel'))[0];
   }
 
+  async banList(offset = 0) {
+    const raw = await this.exec('banList.list', offset.toString());
+    return rconUtils.zipBanList(raw);
+  }
+
   processEvent = (event: { id: number; data: string[] }) => this.events.next(event.data);
 
   // Player Events
