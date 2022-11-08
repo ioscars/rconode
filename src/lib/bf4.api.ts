@@ -138,6 +138,10 @@ export class BF4Api {
     filter((e) => e[0] === "player.onJoin"),
     map((e) => ({ name: e[1], guid: e[2] }))
   );
+  onPlayerAuthenticated$ = this.events.pipe(
+    filter((e) => e[0] === "player.onAuthenticated"),
+    map((e) => ({ name: e[1] }))
+  );
   onPlayerSpawn$ = this.events.pipe(
     filter((e) => e[0] === "player.onSpawn"),
     map((e) => ({ name: e[1], team: e[2] }))
