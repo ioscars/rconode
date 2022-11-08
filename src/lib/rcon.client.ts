@@ -10,9 +10,9 @@ class ErrorRconServer extends Error {}
 const debug = d('rconode:client');
 export class RconClient extends EventEmitter {
   sock = new TCPClient();
-  protected id = 0x3fffffff;
-  protected buf = new Buffer();
-  protected cbs = new Map<number, Deferred<string[]>>();
+  protected id!: number;
+  protected buf!: Buffer;
+  protected cbs!: Map<number, Deferred<string[]>>;
   protected ready = deferred();
 
   constructor(
@@ -24,9 +24,16 @@ export class RconClient extends EventEmitter {
     super();
 
     this.sock.events.on(TCPEvents.RECEIVED_DATA, (e: ITCPEventData) =>  this._gather(e.data));
-    this.sock.events.on(TCPEvents.CONNECT, () =>  this.sock.poll());
+    this.sock.events.on(TCPEvents.CONNECT, () => { this.init(); this.sock.poll(); });
     this.sock.events.on(TCPEvents.DISCONNECT, () => debug('Disconnected'));
     this.sock.events.on(TCPEvents.ERROR, () => this.isAutoReconnect && this.reconnect());
+  }
+
+  protected init() {
+    this.id = 0x3fffffff;
+    this.buf = new Buffer();
+    this.cbs = new Map<number, Deferred<string[]>>();
+    this.ready = deferred();
   }
 
   async connect() {
@@ -38,7 +45,7 @@ export class RconClient extends EventEmitter {
   async reconnect() {
     debug('Reconnect');
     await delay(1000);
-    await this.sock.connect(this.host, this.port);
+    await this.connect();
   }
 
   disconnect() {
